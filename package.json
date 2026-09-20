@@ -1,0 +1,11 @@
+{
+  "name": "rsvp-joshell-and-jake",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "build": "npm --prefix client install --include=dev && npm --prefix client run build && npm --prefix server install"
+  }
+}

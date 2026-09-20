@@ -1,0 +1,7 @@
+@import './styles/tokens.css';
+@import './styles/guest.css';
+@import './styles/admin.css';
+
+#root {
+  min-height: 100svh;
+}

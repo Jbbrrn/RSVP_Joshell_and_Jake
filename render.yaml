@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: rsvp-joshell-and-jake
+    runtime: node
+    buildCommand: npm --prefix client install --include=dev && npm --prefix client run build && npm --prefix server install
+    startCommand: node server/index.js
+    healthCheckPath: /health
