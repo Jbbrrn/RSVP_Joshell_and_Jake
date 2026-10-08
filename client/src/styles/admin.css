@@ -285,7 +285,7 @@
 
 .admin-summaries {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--space-4);
   margin-bottom: var(--space-6);
 }
@@ -325,7 +325,7 @@
 
 .admin-add-guest {
   display: grid;
-  grid-template-columns: 1.4fr 1fr 7rem auto;
+  grid-template-columns: 1.5fr 1fr auto;
   gap: var(--space-3);
   align-items: end;
   margin-bottom: var(--space-5);

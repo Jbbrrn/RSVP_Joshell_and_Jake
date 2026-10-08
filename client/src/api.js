@@ -57,13 +57,13 @@ export function getInvitation(token) {
   }).then(readBody);
 }
 
-export function submitRsvp(token, { status, companions = [] }) {
+export function submitRsvp(token, { status }) {
   return fetch('/api/rsvp', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ status, companions }),
+    body: JSON.stringify({ status }),
   }).then(readBody);
 }

@@ -1,6 +1,5 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import { getToken, submitRsvp } from './api';
-import { namesMatch, tidyName, uniqueCompanionNames } from './names.js';
 import { Sprig, formatWeddingDate } from './ornaments.jsx';
 
 const STATUS_LABEL = {
@@ -10,44 +9,13 @@ const STATUS_LABEL = {
 };
 
 export default function InvitationSite({ guest, invitation, onGuestChange, onBack }) {
-  const companionId = useId();
   const [selectedStatus, setSelectedStatus] = useState(
     guest.rsvpStatus === 'declined' ? 'declined' : 'attending'
   );
-  const [companions, setCompanions] = useState(guest.companions || []);
-  const [newCompName, setNewCompName] = useState('');
-  const [companionError, setCompanionError] = useState('');
   const [rsvpSaving, setRsvpSaving] = useState(false);
   const [rsvpSuccess, setRsvpSuccess] = useState('');
   const [rsvpError, setRsvpError] = useState('');
-
-  function addCompanion(event) {
-    event.preventDefault();
-    setCompanionError('');
-    const trimmed = tidyName(newCompName);
-    if (trimmed.length < 2) {
-      setCompanionError('Please enter a companion full name.');
-      return;
-    }
-    if (trimmed.length > 150) {
-      setCompanionError('Companion name is too long.');
-      return;
-    }
-    if (companions.length >= guest.maxCompanions) {
-      setCompanionError(`You can bring up to ${guest.maxCompanions} companion(s).`);
-      return;
-    }
-    if (companions.some((name) => namesMatch(name, trimmed))) {
-      setCompanionError('This companion is already in your list.');
-      return;
-    }
-    if (namesMatch(guest.fullName, trimmed)) {
-      setCompanionError('Please use a different name than your own.');
-      return;
-    }
-    setCompanions([...companions, trimmed]);
-    setNewCompName('');
-  }
+  const [justSaved, setJustSaved] = useState(false);
 
   async function saveRsvp() {
     setRsvpSaving(true);
@@ -55,14 +23,14 @@ export default function InvitationSite({ guest, invitation, onGuestChange, onBac
     setRsvpSuccess('');
     try {
       const token = getToken();
-      const names = selectedStatus === 'attending' ? uniqueCompanionNames(companions) : [];
-      const res = await submitRsvp(token, { status: selectedStatus, companions: names });
+      const res = await submitRsvp(token, { status: selectedStatus });
       onGuestChange(res.guest);
-      setCompanions(res.guest.companions || []);
+      setJustSaved(true);
+      window.setTimeout(() => setJustSaved(false), 2200);
       setRsvpSuccess(
         selectedStatus === 'attending'
-          ? 'Your attendance is saved. You can change this later if you need to.'
-          : 'Your response is saved. You can change this later if you need to.'
+          ? 'Your attendance is confirmed. We look forward to celebrating with you!'
+          : 'Your response has been saved. We will miss you!'
       );
     } catch (err) {
       setRsvpError(err.message || 'Could not save RSVP. Please try again.');
@@ -106,6 +74,7 @@ export default function InvitationSite({ guest, invitation, onGuestChange, onBac
         </article>
 
         <section className="site-card site-rsvp-card" id="rsvp">
+          <Sprig className="rsvp-sprig-top" />
           <div className="rsvp-guest-header">
             <span className="rsvp-role-pill">{guest.role}</span>
             <h2 className="rsvp-guest-title">{guest.fullName}</h2>
@@ -113,109 +82,63 @@ export default function InvitationSite({ guest, invitation, onGuestChange, onBac
 
           <div className="rsvp-status-callout">
             <span className="status-callout-label">Current status</span>
-            <span className={`status-badge status-${guest.rsvpStatus}`}>
+            <span className={`status-badge status-${guest.rsvpStatus}${justSaved ? ' is-updated' : ''}`}>
               {STATUS_LABEL[guest.rsvpStatus] || guest.rsvpStatus}
             </span>
           </div>
+
+          <p className="rsvp-seat-note">A seat has been reserved in your honor.</p>
+
           {deadline ? (
-            <p className="companion-area-note">Please reply by {deadline}.</p>
+            <p className="rsvp-deadline-note">Please reply by {deadline}.</p>
           ) : (
-            <p className="companion-area-note">You can change your answer later.</p>
+            <p className="rsvp-deadline-note">You can update your response at any time.</p>
           )}
 
-          <div className="rsvp-choice-container">
+          <div className="rsvp-choice-container" role="radiogroup" aria-label="RSVP attendance response">
             <button
               type="button"
+              role="radio"
+              aria-checked={selectedStatus === 'attending'}
               className={`rsvp-choice-btn ${selectedStatus === 'attending' ? 'is-selected' : ''}`}
               onClick={() => {
                 setSelectedStatus('attending');
                 setRsvpSuccess('');
               }}
             >
+              <span className="choice-indicator" aria-hidden="true" />
               <span className="choice-title">Attending</span>
-              <span className="choice-sub">I will be there</span>
+              <span className="choice-sub">Joyfully accepts</span>
             </button>
             <button
               type="button"
+              role="radio"
+              aria-checked={selectedStatus === 'declined'}
               className={`rsvp-choice-btn ${selectedStatus === 'declined' ? 'is-selected' : ''}`}
               onClick={() => {
                 setSelectedStatus('declined');
                 setRsvpSuccess('');
               }}
             >
+              <span className="choice-indicator" aria-hidden="true" />
               <span className="choice-title">Declined</span>
-              <span className="choice-sub">I cannot attend</span>
+              <span className="choice-sub">Regretfully declines</span>
             </button>
           </div>
-
-          {selectedStatus === 'attending' ? (
-            <div className="rsvp-companion-area">
-              <div className="companion-area-header">
-                <h3 className="companion-area-title">Companions</h3>
-                <span className="companion-counter">
-                  {companions.length} / {guest.maxCompanions}
-                </span>
-              </div>
-              <p className="companion-area-note">
-                You can bring up to {guest.maxCompanions} companion{guest.maxCompanions === 1 ? '' : 's'}.
-              </p>
-
-              {companions.length > 0 ? (
-                <ul className="companion-chips-list">
-                  {companions.map((name, index) => (
-                    <li key={`${name}-${index}`} className="companion-chip">
-                      <span>{name}</span>
-                      <button
-                        type="button"
-                        className="comp-remove-btn"
-                        onClick={() => {
-                          setCompanions(companions.filter((_, i) => i !== index));
-                          setCompanionError('');
-                        }}
-                        aria-label={`Remove ${name}`}
-                      >
-                        ×
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-
-              {companions.length < guest.maxCompanions ? (
-                <form className="companion-input-row" onSubmit={addCompanion}>
-                  <div className="guest-field companion-field">
-                    <label htmlFor={companionId}>Companion full name</label>
-                    <input
-                      id={companionId}
-                      className="companion-text-input"
-                      value={newCompName}
-                      onChange={(e) => setNewCompName(e.target.value)}
-                      autoComplete="name"
-                    />
-                  </div>
-                  <button type="submit" className="companion-add-btn">
-                    Add
-                  </button>
-                </form>
-              ) : (
-                <p className="companion-max-note">
-                  You are at your companion limit. Ask us if you need that raised.
-                </p>
-              )}
-              {companionError ? (
-                <p className="guest-error comp-error" role="alert">
-                  {companionError}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
 
           {rsvpError ? (
             <p className="guest-error" role="alert">
               {rsvpError}
             </p>
           ) : null}
-          {rsvpSuccess ? <p className="guest-success-banner">{rsvpSuccess}</p> : null}
+          {rsvpSuccess ? (
+            <div className="guest-success-banner" role="status">
+              <svg className="success-icon" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+              <span>{rsvpSuccess}</span>
+            </div>
+          ) : null}
 
           <button
             type="button"
@@ -225,6 +148,7 @@ export default function InvitationSite({ guest, invitation, onGuestChange, onBac
           >
             {rsvpSaving ? 'Saving…' : 'Save RSVP'}
           </button>
+          <Sprig className="guest-sprig-bottom" />
         </section>
 
         <section className="site-card site-schedule-card">

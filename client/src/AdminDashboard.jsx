@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { getAdminToken, setAdminToken, clearAdminToken } from './api';
-import { namesMatch, tidyName } from './names.js';
+import { tidyName } from './names.js';
 import { Sprig } from './ornaments.jsx';
 
 export default function AdminDashboard({ onBack }) {
@@ -17,17 +17,10 @@ export default function AdminDashboard({ onBack }) {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [searchDebounce, setSearchDebounce] = useState('');
-  const [editingId, setEditingId] = useState(null);
-  const [limitInput, setLimitInput] = useState('');
-  const [limitError, setLimitError] = useState('');
-  const [addingCompanionId, setAddingCompanionId] = useState(null);
-  const [companionName, setCompanionName] = useState('');
-  const [companionError, setCompanionError] = useState('');
   const [exporting, setExporting] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [newGuestName, setNewGuestName] = useState('');
   const [newGuestRole, setNewGuestRole] = useState('Guest');
-  const [newGuestLimit, setNewGuestLimit] = useState('2');
   const [addGuestError, setAddGuestError] = useState('');
   const [addGuestSaving, setAddGuestSaving] = useState(false);
 
@@ -142,13 +135,8 @@ export default function AdminDashboard({ onBack }) {
     event.preventDefault();
     const fullName = tidyName(newGuestName);
     const role = tidyName(newGuestRole) || 'Guest';
-    const maxCompanions = Number(newGuestLimit);
     if (fullName.length < 3) {
       setAddGuestError('Enter the guest’s full name.');
-      return;
-    }
-    if (!Number.isInteger(maxCompanions) || maxCompanions < 0 || maxCompanions > 10) {
-      setAddGuestError('Companion limit must be 0 to 10.');
       return;
     }
     setAddGuestError('');
@@ -159,7 +147,7 @@ export default function AdminDashboard({ onBack }) {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ fullName, role, maxCompanions }),
+      body: JSON.stringify({ fullName, role }),
     })
       .then(async (res) => {
         if (logoutIfUnauthorized(res)) return;
@@ -167,106 +155,11 @@ export default function AdminDashboard({ onBack }) {
         if (!res.ok) throw new Error(data.message || 'Could not add guest.');
         setNewGuestName('');
         setNewGuestRole('Guest');
-        setNewGuestLimit('2');
         void loadGuests(token, filter, searchDebounce);
         void loadSummary(token);
       })
       .catch((err) => setAddGuestError(err.message || 'Could not add guest.'))
       .finally(() => setAddGuestSaving(false));
-  }
-
-  function startEdit(guest) {
-    setEditingId(guest.id);
-    setLimitInput(String(guest.maxCompanions));
-    setLimitError('');
-  }
-
-  function saveLimit(guest) {
-    const value = Number(limitInput);
-    if (!Number.isInteger(value) || value < 0 || value > 10) {
-      setLimitError('Limit must be 0 to 10.');
-      return;
-    }
-    if (value < guest.companions.length) {
-      setLimitError('Limits cannot be lower than companions already added.');
-      return;
-    }
-    fetch(`/api/admin/guests/${guest.id}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ maxCompanions: value }),
-    })
-      .then(async (res) => {
-        if (logoutIfUnauthorized(res)) return;
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.message || 'Failed to update limit.');
-        setEditingId(null);
-        setLimitInput('');
-        setLimitError('');
-        void loadGuests(token, filter, searchDebounce);
-        void loadSummary(token);
-      })
-      .catch((err) => setLimitError(err.message || 'Failed to update limit.'));
-  }
-
-  function startAddCompanion(guestId) {
-    setAddingCompanionId(guestId);
-    setCompanionName('');
-    setCompanionError('');
-  }
-
-  function addCompanion(guestId) {
-    const guest = guests.find((g) => g.id === guestId);
-    const name = tidyName(companionName);
-    if (name.length < 2) {
-      setCompanionError('Please enter a companion name.');
-      return;
-    }
-    if (guest?.companions.some((c) => namesMatch(c.fullName, name))) {
-      setCompanionError('That companion is already added.');
-      return;
-    }
-    if (guest && namesMatch(guest.fullName, name)) {
-      setCompanionError('A companion cannot have the same name as the guest.');
-      return;
-    }
-    fetch(`/api/admin/guests/${guestId}/companions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ fullName: name }),
-    })
-      .then(async (res) => {
-        if (logoutIfUnauthorized(res)) return;
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.message || 'Failed to add companion.');
-        setAddingCompanionId(null);
-        setCompanionName('');
-        setCompanionError('');
-        void loadGuests(token, filter, searchDebounce);
-        void loadSummary(token);
-      })
-      .catch((err) => setCompanionError(err.message || 'Failed to add companion.'));
-  }
-
-  function removeCompanion(guestId, companionId) {
-    fetch(`/api/admin/companions/${companionId}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(async (res) => {
-        if (logoutIfUnauthorized(res)) return;
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.message || 'Failed to remove companion.');
-        void loadGuests(token, filter, searchDebounce);
-        void loadSummary(token);
-      })
-      .catch((err) => window.alert(err.message || 'Failed to remove companion.'));
   }
 
   function downloadCSV() {
@@ -495,10 +388,6 @@ export default function AdminDashboard({ onBack }) {
                 <span className="admin-summary-label">Declined</span>
                 <span className="admin-summary-value">{summary?.declined ?? 0}</span>
               </div>
-              <div className="admin-summary-card">
-                <span className="admin-summary-label">Maximum possible headcount</span>
-                <span className="admin-summary-value">{summary?.maxPossibleHeadcount ?? '—'}</span>
-              </div>
             </div>
 
             <form className="admin-add-guest" onSubmit={addInvitedGuest}>
@@ -520,17 +409,6 @@ export default function AdminDashboard({ onBack }) {
                   value={newGuestRole}
                   onChange={(e) => setNewGuestRole(e.target.value)}
                   maxLength={50}
-                />
-              </div>
-              <div className="admin-field">
-                <label htmlFor="new-guest-limit">Companion limit</label>
-                <input
-                  id="new-guest-limit"
-                  type="number"
-                  min="0"
-                  max="10"
-                  value={newGuestLimit}
-                  onChange={(e) => setNewGuestLimit(e.target.value)}
                 />
               </div>
               <button type="submit" className="admin-btn" disabled={addGuestSaving}>
@@ -574,9 +452,6 @@ export default function AdminDashboard({ onBack }) {
                     <th>Role</th>
                     <th>Letter status</th>
                     <th>RSVP</th>
-                    <th>Companions</th>
-                    <th>Limit</th>
-                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -594,81 +469,6 @@ export default function AdminDashboard({ onBack }) {
                         <span className={`admin-status admin-status-${guest.rsvpStatus}`}>
                           {statusLabel(guest.rsvpStatus)}
                         </span>
-                      </td>
-                      <td>
-                        {guest.companions.length > 0 ? (
-                          <ul className="admin-chips">
-                            {guest.companions.map((c) => (
-                              <li key={c.id} className="admin-chip">
-                                {c.fullName}
-                                <button
-                                  type="button"
-                                  className="admin-chip-remove"
-                                  onClick={() => removeCompanion(guest.id, c.id)}
-                                  aria-label={`Remove ${c.fullName}`}
-                                >
-                                  ×
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <span className="admin-empty">+0</span>
-                        )}
-                      </td>
-                      <td>
-                        {editingId === guest.id ? (
-                          <div className="admin-limit-edit">
-                            <label htmlFor={`limit-${guest.id}`} className="sr-only">Companion limit</label>
-                            <input
-                              id={`limit-${guest.id}`}
-                              type="number"
-                              min="0"
-                              max="10"
-                              value={limitInput}
-                              onChange={(e) => setLimitInput(e.target.value)}
-                            />
-                            {limitError ? <p className="admin-error">{limitError}</p> : null}
-                            <button type="button" className="admin-btn-small" onClick={() => saveLimit(guest)}>Save</button>
-                            <button type="button" className="admin-btn-ghost-small" onClick={() => setEditingId(null)}>Cancel</button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            className="admin-limit-value"
-                            onClick={() => startEdit(guest)}
-                            title="Change limit"
-                          >
-                            {guest.maxCompanions}
-                          </button>
-                        )}
-                      </td>
-                      <td>
-                        {addingCompanionId === guest.id ? (
-                          <div className="admin-add-companion">
-                            <label htmlFor={`comp-${guest.id}`} className="sr-only">Add companion</label>
-                            <input
-                              id={`comp-${guest.id}`}
-                              type="text"
-                              value={companionName}
-                              onChange={(e) => setCompanionName(e.target.value)}
-                              placeholder="Companion name"
-                            />
-                            {companionError ? <p className="admin-error">{companionError}</p> : null}
-                            <button type="button" className="admin-btn-small" onClick={() => addCompanion(guest.id)}>Add</button>
-                            <button type="button" className="admin-btn-ghost-small" onClick={() => { setAddingCompanionId(null); setCompanionError(''); }}>Cancel</button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            className="admin-btn-small"
-                            onClick={() => startAddCompanion(guest.id)}
-                            disabled={guest.companions.length >= guest.maxCompanions}
-                            title={guest.companions.length >= guest.maxCompanions ? 'Raise the limit first' : 'Add companion'}
-                          >
-                            +1
-                          </button>
-                        )}
                       </td>
                     </tr>
                   ))}
@@ -688,7 +488,6 @@ export default function AdminDashboard({ onBack }) {
                   <th>Role</th>
                   <th>Letter status</th>
                   <th>RSVP</th>
-                  <th>Companions</th>
                 </tr>
               </thead>
               <tbody>
@@ -698,9 +497,6 @@ export default function AdminDashboard({ onBack }) {
                     <td>{guest.role}</td>
                     <td>{guest.openedAt ? `Opened ${formatDate(guest.openedAt)}` : 'Not opened yet'}</td>
                     <td>{statusLabel(guest.rsvpStatus)}</td>
-                    <td>
-                      {guest.companions.length > 0 ? guest.companions.map((c) => c.fullName).join(', ') : '—'}
-                    </td>
                   </tr>
                 ))}
               </tbody>

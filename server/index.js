@@ -4,7 +4,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const pool = require('./db');
-const { normalizeName, uniqueCompanionNames, namesMatch } = require('./normalize');
+const { normalizeName } = require('./normalize');
 const { sendError } = require('./errors');
 const adminRouter = require('./admin');
 
@@ -39,21 +39,15 @@ app.get('/health/db', async (req, res) => {
 // ---------- Helpers
 async function getGuest(id) {
   const [rows] = await pool.query(
-    'SELECT id, full_name, role, max_companions, rsvp_status FROM invited_guest WHERE id = ?',
+    'SELECT id, full_name, role, rsvp_status FROM invited_guest WHERE id = ?',
     [id]
   );
   if (!rows.length) return null;
   const g = rows[0];
-  const [comps] = await pool.query(
-    'SELECT full_name FROM companion WHERE guest_id = ? ORDER BY id',
-    [id]
-  );
   return {
     fullName: g.full_name,
     role: g.role,
-    maxCompanions: g.max_companions,
     rsvpStatus: g.rsvp_status,
-    companions: comps.map((c) => c.full_name),
   };
 }
 
@@ -129,50 +123,18 @@ app.get('/api/invitation', auth, (req, res) => {
 });
 
 app.post('/api/rsvp', auth, wrap(async (req, res) => {
-  const { status, companions = [] } = req.body || {};
+  const { status } = req.body || {};
   if (!['attending', 'declined'].includes(status)) {
     return sendError(res, 400, 'INVALID_STATUS', 'Invalid RSVP status.');
   }
   const guest = await getGuest(req.guestId);
   if (!guest) return sendError(res, 401, 'UNAUTHORIZED', 'Please sign in.');
 
-  let names = [];
-  if (status === 'attending') {
-    if (!Array.isArray(companions)) {
-      return sendError(res, 400, 'INVALID_COMPANIONS', 'Companions must be a list of names.');
-    }
-    names = uniqueCompanionNames(companions).filter((n) => !namesMatch(n, guest.fullName));
-    if (names.length > guest.maxCompanions) {
-      return sendError(
-        res,
-        400,
-        'COMPANION_LIMIT',
-        `You can bring up to ${guest.maxCompanions} companion(s).`
-      );
-    }
-    if (names.some((n) => n.length > 150)) {
-      return sendError(res, 400, 'INVALID_NAME', 'A companion name is too long.');
-    }
-  }
+  await pool.query(
+    'UPDATE invited_guest SET rsvp_status = ?, responded_at = NOW() WHERE id = ?',
+    [status, req.guestId]
+  );
 
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
-    await conn.query(
-      'UPDATE invited_guest SET rsvp_status = ?, responded_at = NOW() WHERE id = ?',
-      [status, req.guestId]
-    );
-    await conn.query('DELETE FROM companion WHERE guest_id = ?', [req.guestId]);
-    for (const n of names) {
-      await conn.query('INSERT INTO companion (guest_id, full_name) VALUES (?, ?)', [req.guestId, n]);
-    }
-    await conn.commit();
-  } catch (e) {
-    await conn.rollback();
-    throw e;
-  } finally {
-    conn.release();
-  }
   res.json({ guest: await getGuest(req.guestId) });
 }));
 
