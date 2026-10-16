@@ -8,6 +8,8 @@ const STATUS_LABEL = {
   declined: 'Declined',
 };
 
+const VENUE_MAP_URL = 'https://maps.app.goo.gl/djhFxXHA4Ux2LTRb9';
+
 export default function InvitationSite({ guest, invitation, onGuestChange, onBack }) {
   const [selectedStatus, setSelectedStatus] = useState(
     guest.rsvpStatus === 'declined' ? 'declined' : 'attending'
@@ -16,6 +18,7 @@ export default function InvitationSite({ guest, invitation, onGuestChange, onBac
   const [rsvpSuccess, setRsvpSuccess] = useState('');
   const [rsvpError, setRsvpError] = useState('');
   const [justSaved, setJustSaved] = useState(false);
+  const [monogramImageFailed, setMonogramImageFailed] = useState(false);
 
   async function saveRsvp() {
     setRsvpSaving(true);
@@ -52,7 +55,16 @@ export default function InvitationSite({ guest, invitation, onGuestChange, onBac
           <button type="button" className="site-back-btn" onClick={onBack}>
             ← Back to envelope
           </button>
-          <p className="site-monogram-badge">{invitation.monogram || 'J | J'}</p>
+          {monogramImageFailed ? (
+            <p className="site-monogram-fallback">{invitation.monogram || 'J | J'}</p>
+          ) : (
+            <img
+              className="site-monogram-badge"
+              src="/mono.png"
+              alt={`${invitation.monogram || 'J | J'} monogram`}
+              onError={() => setMonogramImageFailed(true)}
+            />
+          )}
         </header>
 
         <article className="site-card site-hero-card">
@@ -67,7 +79,14 @@ export default function InvitationSite({ guest, invitation, onGuestChange, onBac
             invite you to celebrate their wedding
           </p>
           <div className="site-date-venue-box">
-            <p className="site-venue-name">{invitation.venue?.name}</p>
+            <a
+              className="site-venue-name"
+              href={VENUE_MAP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {invitation.venue?.name}
+            </a>
             <p className="site-date-name">{formatWeddingDate(invitation.date)}</p>
           </div>
           <Sprig className="guest-sprig-bottom" />
@@ -157,7 +176,9 @@ export default function InvitationSite({ guest, invitation, onGuestChange, onBac
             <div className="schedule-dot" />
             <div>
               <strong>Venue</strong>
-              <p>{invitation.venue?.name}</p>
+              <a href={VENUE_MAP_URL} target="_blank" rel="noopener noreferrer">
+                {invitation.venue?.name}
+              </a>
             </div>
           </div>
           <div className="schedule-item">

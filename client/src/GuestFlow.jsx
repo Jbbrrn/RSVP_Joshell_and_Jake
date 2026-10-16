@@ -169,7 +169,14 @@ export default function GuestFlow() {
                     <span>and</span>
                     {invitation.couple.groom}
                   </h1>
-                  <p className="guest-meta">{invitation.venue?.name}</p>
+                  <a
+                    className="guest-meta"
+                    href="https://maps.app.goo.gl/djhFxXHA4Ux2LTRb9"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {invitation.venue?.name}
+                  </a>
                   <p className="guest-meta">{formatWeddingDate(invitation.date)}</p>
                   <button
                     type="button"
@@ -192,29 +199,7 @@ export default function GuestFlow() {
               aria-label="Open invitation and enter your name"
               tabIndex={phase === 'sealed' ? 0 : -1}
             >
-              <span className="seal-half seal-left">
-                <span className="seal-letter">J</span>
-              </span>
-              <span className="seal-half seal-right">
-                <span className="seal-letter">J</span>
-              </span>
-              <svg className="seal-fissure" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                <defs>
-                  <linearGradient id="goldGlow" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#fff2cb" stopOpacity="0.4" />
-                    <stop offset="50%" stopColor="#ffecc0" stopOpacity="1" />
-                    <stop offset="100%" stopColor="#f7dfa4" stopOpacity="0.4" />
-                  </linearGradient>
-                </defs>
-                <path
-                  d="M 50 0 L 48.5 14 L 52 28 L 47.5 42 L 52.5 56 L 48 70 L 51.5 84 L 50 100"
-                  fill="none"
-                  stroke="url(#goldGlow)"
-                  strokeWidth="2.4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              <img className="seal-image" src="/mono.png" alt="" />
             </button>
           </div>
         </div>
@@ -233,7 +218,9 @@ export default function GuestFlow() {
                 <p className="guest-dear">
                   Dear <span>{fullName.trim() || '____'}</span>,
                 </p>
-                <p className="guest-lead">Enter your full name to check your invitation.</p>
+                <p className="guest-lead">
+                  Enter your full name as listed on the invitation, including any suffix (Jr., Sr., etc.).
+                </p>
                 <div className="guest-field">
                   <label htmlFor={nameId}>Full name</label>
                   <input

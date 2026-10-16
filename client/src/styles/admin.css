@@ -231,6 +231,26 @@
   cursor: pointer;
 }
 
+.admin-btn-danger-small {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--error);
+  border-radius: var(--radius-pill);
+  background: var(--error-light);
+  color: var(--error);
+  font-weight: 600;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.admin-btn-danger-small:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 .admin-btn-ghost-small {
   display: inline-flex;
   align-items: center;
@@ -405,6 +425,24 @@
   color: var(--deep-blue-soft);
 }
 
+.admin-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.admin-table-edit-input {
+  min-height: 2.25rem;
+  width: min(14rem, 100%);
+  border: var(--line-gold);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-2);
+  background: var(--champagne-light);
+  color: var(--deep-blue);
+  font-size: var(--text-sm);
+}
+
 .admin-guest-main {
   display: flex;
   align-items: center;
@@ -511,37 +549,80 @@
 
 /* ---------- Print ---------- */
 .admin-print {
+  display: none;
   max-width: 56rem;
   margin: 0 auto;
 }
 
-.admin-print-table {
-  background: var(--white);
-  color: var(--black, #222);
+.admin-print.is-visible {
+  display: block;
 }
 
-.admin-print-table th,
-.admin-print-table td {
-  color: var(--black, #222);
-  border-bottom: 1px solid #ccc;
+.admin-print-names {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2) var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.admin-print-totals {
-  margin-top: var(--space-6);
+.admin-print-names li {
+  padding: var(--space-2) 0;
+  border-bottom: var(--line-gold);
+  color: var(--deep-blue);
   font-size: var(--text-base);
 }
 
-/* ---------- Settings ---------- */
-.admin-settings {
-  max-width: 36rem;
-  margin: 0 auto;
-}
+@media print {
+  @page {
+    margin: 18mm;
+  }
 
-.admin-settings-card {
-  padding: var(--space-6);
-  background: var(--glass-champagne);
-  border: var(--line-gold);
-  border-radius: var(--radius-card);
+  .admin-page {
+    display: block;
+    min-height: 0;
+    background: #fff;
+    color: #000;
+  }
+
+  .admin-sidebar,
+  .admin-topbar,
+  .admin-dashboard,
+  .admin-content {
+    min-height: 0;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .admin-print,
+  .admin-print.is-visible {
+    display: block !important;
+    max-width: none;
+    margin: 0;
+  }
+
+  .admin-print .section-title {
+    display: none;
+  }
+
+  .admin-print-names {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.3rem 2rem;
+  }
+
+  .admin-print-names li {
+    padding: 0.3rem 0;
+    border: 0;
+    color: #000;
+    font-size: 12pt;
+    break-inside: avoid;
+  }
+
+  .admin-empty,
+  .admin-error {
+    display: none !important;
+  }
 }
 
 .admin-menu-btn {

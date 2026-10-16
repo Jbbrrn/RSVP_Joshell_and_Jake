@@ -187,6 +187,55 @@ router.post('/guests', wrap(async (req, res) => {
   }
 }));
 
+router.put('/guests/:id', wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) {
+    return sendError(res, 400, 'INVALID_GUEST_ID', 'Invalid guest ID.');
+  }
+
+  const fullName = tidyName(req.body?.fullName);
+  const role = tidyName(req.body?.role || 'Guest') || 'Guest';
+  if (fullName.length < 3 || fullName.length > 150) {
+    return sendError(res, 400, 'INVALID_NAME', 'Please enter the guest’s full name.');
+  }
+  if (role.length > 50) {
+    return sendError(res, 400, 'INVALID_ROLE', 'Role must be 50 characters or fewer.');
+  }
+
+  if (!(await getAdminGuest(id))) {
+    return sendError(res, 404, 'GUEST_NOT_FOUND', 'Guest not found.');
+  }
+
+  try {
+    await pool.query(
+      `UPDATE invited_guest
+          SET full_name = ?, name_key = ?, role = ?
+        WHERE id = ?`,
+      [fullName, normalizeName(fullName), role, id]
+    );
+    res.json({ guest: await getAdminGuest(id) });
+  } catch (err) {
+    if (err && err.code === 'ER_DUP_ENTRY') {
+      return sendError(res, 409, 'DUPLICATE_GUEST', 'That guest is already on the list.');
+    }
+    throw err;
+  }
+}));
+
+router.delete('/guests/:id', wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) {
+    return sendError(res, 400, 'INVALID_GUEST_ID', 'Invalid guest ID.');
+  }
+
+  const [result] = await pool.query('DELETE FROM invited_guest WHERE id = ?', [id]);
+  if (!result.affectedRows) {
+    return sendError(res, 404, 'GUEST_NOT_FOUND', 'Guest not found.');
+  }
+
+  res.json({ deleted: true });
+}));
+
 router.get('/export.csv', wrap(async (req, res) => {
   const [guests] = await pool.query(
     `SELECT id, full_name, role, rsvp_status, first_opened_at

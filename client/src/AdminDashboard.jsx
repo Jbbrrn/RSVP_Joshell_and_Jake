@@ -14,6 +14,7 @@ export default function AdminDashboard({ onBack }) {
 
   const [summary, setSummary] = useState(null);
   const [guests, setGuests] = useState([]);
+  const [printGuests, setPrintGuests] = useState([]);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [searchDebounce, setSearchDebounce] = useState('');
@@ -23,6 +24,16 @@ export default function AdminDashboard({ onBack }) {
   const [newGuestRole, setNewGuestRole] = useState('Guest');
   const [addGuestError, setAddGuestError] = useState('');
   const [addGuestSaving, setAddGuestSaving] = useState(false);
+  const [editingGuestId, setEditingGuestId] = useState(null);
+  const [editGuestName, setEditGuestName] = useState('');
+  const [editGuestRole, setEditGuestRole] = useState('');
+  const [editGuestError, setEditGuestError] = useState('');
+  const [editGuestSaving, setEditGuestSaving] = useState(false);
+  const [deletingGuestId, setDeletingGuestId] = useState(null);
+  const [deleteGuestError, setDeleteGuestError] = useState('');
+  const [printing, setPrinting] = useState(false);
+  const [printRequested, setPrintRequested] = useState(false);
+  const [printError, setPrintError] = useState('');
 
   const filterRef = useRef(null);
   const searchRef = useRef(null);
@@ -72,10 +83,29 @@ export default function AdminDashboard({ onBack }) {
     const guestFilter = tab === 'print' ? 'all' : filter;
     const guestSearch = tab === 'print' ? '' : searchDebounce;
     void loadSummary(token);
-    if (tab === 'dashboard' || tab === 'guests' || tab === 'print') {
+    if (tab === 'dashboard' || tab === 'guests') {
       void loadGuests(token, guestFilter, guestSearch);
     }
   }, [tab, token, filter, searchDebounce]);
+
+  useEffect(() => {
+    if (!token || tab !== 'print') return undefined;
+    void loadAttendingGuests(token).catch((err) => {
+      setPrintError(err.message || 'Could not load attending guests.');
+    });
+    return undefined;
+  }, [tab, token]);
+
+  useEffect(() => {
+    if (!printRequested) return undefined;
+    const frame = window.requestAnimationFrame(() => window.print());
+    const handleAfterPrint = () => setPrintRequested(false);
+    window.addEventListener('afterprint', handleAfterPrint, { once: true });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('afterprint', handleAfterPrint);
+    };
+  }, [printRequested, printGuests]);
 
   useEffect(() => {
     if (!token) return undefined;
@@ -84,7 +114,7 @@ export default function AdminDashboard({ onBack }) {
       void loadSummary(token);
       const guestFilter = tab === 'print' ? 'all' : filter;
       const guestSearch = tab === 'print' ? '' : searchDebounce;
-      if (tab === 'dashboard' || tab === 'guests' || tab === 'print') {
+      if (tab === 'dashboard' || tab === 'guests') {
         void loadGuests(token, guestFilter, guestSearch);
       }
     }, 15_000);
@@ -162,6 +192,82 @@ export default function AdminDashboard({ onBack }) {
       .finally(() => setAddGuestSaving(false));
   }
 
+  function startEditingGuest(guest) {
+    setEditingGuestId(guest.id);
+    setEditGuestName(guest.fullName);
+    setEditGuestRole(guest.role);
+    setEditGuestError('');
+  }
+
+  function cancelEditingGuest() {
+    setEditingGuestId(null);
+    setEditGuestName('');
+    setEditGuestRole('');
+    setEditGuestError('');
+  }
+
+  async function saveGuest(guest) {
+    const fullName = tidyName(editGuestName);
+    const role = tidyName(editGuestRole) || 'Guest';
+    if (fullName.length < 3 || fullName.length > 150) {
+      setEditGuestError('Name must be between 3 and 150 characters.');
+      return;
+    }
+    if (role.length > 50) {
+      setEditGuestError('Role must be 50 characters or fewer.');
+      return;
+    }
+
+    setEditGuestError('');
+    setEditGuestSaving(true);
+    try {
+      const res = await fetch(`/api/admin/guests/${guest.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ fullName, role }),
+      });
+      if (logoutIfUnauthorized(res)) return;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || 'Could not update guest.');
+      cancelEditingGuest();
+      await Promise.all([
+        loadGuests(token, filter, searchDebounce),
+        loadSummary(token),
+      ]);
+    } catch (err) {
+      setEditGuestError(err.message || 'Could not update guest.');
+    } finally {
+      setEditGuestSaving(false);
+    }
+  }
+
+  async function deleteGuest(guest) {
+    if (!window.confirm(`Delete ${guest.fullName} from the guest list? This cannot be undone.`)) return;
+
+    setDeleteGuestError('');
+    setDeletingGuestId(guest.id);
+    try {
+      const res = await fetch(`/api/admin/guests/${guest.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (logoutIfUnauthorized(res)) return;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || 'Could not delete guest.');
+      await Promise.all([
+        loadGuests(token, filter, searchDebounce),
+        loadSummary(token),
+      ]);
+    } catch (err) {
+      setDeleteGuestError(err.message || 'Could not delete guest.');
+    } finally {
+      setDeletingGuestId(null);
+    }
+  }
+
   function downloadCSV() {
     setExporting(true);
     fetch('/api/admin/export.csv', {
@@ -185,8 +291,28 @@ export default function AdminDashboard({ onBack }) {
       .finally(() => setExporting(false));
   }
 
-  function printList() {
-    window.print();
+  async function loadAttendingGuests(givenToken) {
+    setPrintError('');
+    const res = await fetch('/api/admin/guests?filter=attending', {
+      headers: { Authorization: `Bearer ${givenToken}` },
+    });
+    if (logoutIfUnauthorized(res)) return false;
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || 'Could not load attending guests.');
+    setPrintGuests(data.guests || []);
+    return true;
+  }
+
+  async function printList() {
+    setPrinting(true);
+    try {
+      if (await loadAttendingGuests(token)) setPrintRequested(true);
+    } catch (err) {
+      setPrintError(err.message || 'Could not prepare the attending list.');
+      window.alert(err.message || 'Could not prepare the attending list.');
+    } finally {
+      setPrinting(false);
+    }
   }
 
   function formatDate(iso) {
@@ -283,13 +409,6 @@ export default function AdminDashboard({ onBack }) {
           >
             Print view
           </button>
-          <button
-            type="button"
-            className={tab === 'settings' ? 'is-active' : ''}
-            onClick={() => setTab('settings')}
-          >
-            Settings
-          </button>
         </nav>
         <div className="admin-sidebar-footer">
           <button type="button" className="admin-btn-outline" onClick={handleLogout}>
@@ -324,7 +443,6 @@ export default function AdminDashboard({ onBack }) {
               {tab === 'dashboard' && 'Dashboard'}
               {tab === 'guests' && 'Guest list'}
               {tab === 'print' && 'Print view'}
-              {tab === 'settings' && 'Settings'}
             </h1>
             {tab === 'dashboard' && lastUpdated ? (
               <span className="admin-live">
@@ -338,18 +456,16 @@ export default function AdminDashboard({ onBack }) {
               </span>
             ) : null}
           </div>
-          {tab === 'dashboard' || tab === 'guests' ? (
+          {tab === 'dashboard' || tab === 'guests' || tab === 'print' ? (
             <div className="admin-topbar-actions">
               {tab === 'guests' ? (
                 <button type="button" className="admin-btn" onClick={downloadCSV} disabled={exporting}>
                   {exporting ? 'Exporting…' : 'Export CSV'}
                 </button>
               ) : null}
-              {tab === 'guests' || tab === 'dashboard' ? (
-                <button type="button" className="admin-btn-outline" onClick={printList}>
-                  Print list
+              <button type="button" className="admin-btn-outline" onClick={printList} disabled={printing}>
+                  {printing ? 'Preparing…' : 'Print list'}
                 </button>
-              ) : null}
             </div>
           ) : null}
         </header>
@@ -444,6 +560,9 @@ export default function AdminDashboard({ onBack }) {
               </div>
             </div>
 
+            {deleteGuestError ? <p className="admin-error" role="alert">{deleteGuestError}</p> : null}
+            {editGuestError ? <p className="admin-error" role="alert">{editGuestError}</p> : null}
+
             <div className="admin-table-wrap">
               <table className="admin-table">
                 <thead>
@@ -452,74 +571,110 @@ export default function AdminDashboard({ onBack }) {
                     <th>Role</th>
                     <th>Letter status</th>
                     <th>RSVP</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {guests.map((guest) => (
+                  {guests.length ? guests.map((guest) => (
                     <tr key={guest.id}>
                       <td>
                         <div className="admin-guest-main">
                           <span className="admin-initials">{guest.fullName.split(' ').map((n) => n[0]).join('').slice(0, 2)}</span>
-                          <span>{guest.fullName}</span>
+                          {editingGuestId === guest.id ? (
+                            <input
+                              className="admin-table-edit-input"
+                              aria-label={`Name for ${guest.fullName}`}
+                              value={editGuestName}
+                              onChange={(event) => setEditGuestName(event.target.value)}
+                              maxLength={150}
+                            />
+                          ) : <span>{guest.fullName}</span>}
                         </div>
                       </td>
-                      <td>{guest.role}</td>
+                      <td>
+                        {editingGuestId === guest.id ? (
+                          <input
+                            className="admin-table-edit-input"
+                            aria-label={`Role for ${guest.fullName}`}
+                            value={editGuestRole}
+                            onChange={(event) => setEditGuestRole(event.target.value)}
+                            maxLength={50}
+                          />
+                        ) : guest.role}
+                      </td>
                       <td>{guest.openedAt ? `Opened ${formatDate(guest.openedAt)}` : 'Not opened yet'}</td>
                       <td>
                         <span className={`admin-status admin-status-${guest.rsvpStatus}`}>
                           {statusLabel(guest.rsvpStatus)}
                         </span>
                       </td>
+                      <td>
+                        <div className="admin-row-actions">
+                          {editingGuestId === guest.id ? (
+                            <>
+                              <button
+                                type="button"
+                                className="admin-btn-small"
+                                onClick={() => saveGuest(guest)}
+                                disabled={editGuestSaving}
+                              >
+                                {editGuestSaving ? 'Saving…' : 'Save'}
+                              </button>
+                              <button
+                                type="button"
+                                className="admin-btn-ghost-small"
+                                onClick={cancelEditingGuest}
+                                disabled={editGuestSaving}
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                className="admin-btn-ghost-small"
+                                onClick={() => startEditingGuest(guest)}
+                                disabled={editingGuestId !== null || deletingGuestId !== null}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="admin-btn-danger-small"
+                                onClick={() => deleteGuest(guest)}
+                                disabled={deletingGuestId !== null || editingGuestId !== null}
+                              >
+                                {deletingGuestId === guest.id ? 'Deleting…' : 'Delete'}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
                     </tr>
-                  ))}
+                  )) : (
+                    <tr>
+                      <td className="admin-empty" colSpan={5}>No guests match these filters.</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
           </section>
         ) : null}
 
-        {tab === 'print' ? (
-          <section className="admin-print">
-            <h2 className="section-title">Print guest list</h2>
-            <table className="admin-table admin-print-table">
-              <thead>
-                <tr>
-                  <th>Guest</th>
-                  <th>Role</th>
-                  <th>Letter status</th>
-                  <th>RSVP</th>
-                </tr>
-              </thead>
-              <tbody>
-                {guests.map((guest) => (
-                  <tr key={guest.id}>
-                    <td>{guest.fullName}</td>
-                    <td>{guest.role}</td>
-                    <td>{guest.openedAt ? `Opened ${formatDate(guest.openedAt)}` : 'Not opened yet'}</td>
-                    <td>{statusLabel(guest.rsvpStatus)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {summary ? (
-              <div className="admin-print-totals">
-                <p>Invited: {summary.invited}</p>
-                <p>Opened: {summary.opened}</p>
-                <p>Confirmed headcount: {summary.confirmedHeadcount}</p>
-              </div>
-            ) : null}
+        <section className={`admin-print${tab === 'print' ? ' is-visible' : ''}`}>
+          <h2 className="section-title">Attending guests</h2>
+          {printError ? <p className="admin-error" role="alert">{printError}</p> : null}
+          {printGuests.length ? (
+            <ul className="admin-print-names">
+              {printGuests.map((guest) => <li key={guest.id}>{guest.fullName}</li>)}
+            </ul>
+          ) : printError ? null : (
+            <p className="admin-empty">No guests have confirmed attendance yet.</p>
+          )}
           </section>
-        ) : null}
 
-        {tab === 'settings' ? (
-          <section className="admin-settings">
-            <h2 className="section-title">Settings</h2>
-            <div className="admin-settings-card">
-              <p>Manage admin accounts, notification preferences, and security settings here.</p>
-              <p>For now, you can reset admin passwords by running <code>node scripts/create-admin.js &lt;username&gt;</code>.</p>
-            </div>
-          </section>
-        ) : null}
       </main>
     </div>
   );
